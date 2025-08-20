@@ -1,0 +1,297 @@
+type Query {
+    # Lead queries
+    getLead(id: ID!): Lead
+    getAllLeads(page: Int = 0, size: Int = 10): LeadPaginationResult
+    getLeadsByStatus(status: String!): LeadPaginationResult
+    getLeadsByLead(leadId: ID!): [Lead]
+
+    # Task queries
+    getTask(id: ID!): Task
+    getTasksByLead(leadId: ID!): [Task]
+
+    # Note queries
+    getNote(id: ID!): Note
+    getNotesByLead(leadId: ID!): [Note]
+    getNotesByTask(taskId: ID!): [Note]
+
+    # Appointment queries
+    getAppointment(id: ID!): Appointment
+    getAllAppointments(
+        page: Int = 0
+        size: Int = 10
+        sortBy: AppointmentSortField = START_TIME
+        sortOrder: SortOrder = DESC
+        filter: AppointmentFilterInput
+    ): AppointmentPaginationResult
+    getAppointmentsByLead(leadId: ID!): [Appointment]
+
+    # Vehicle queries
+    getVehicle(id: ID!): Vehicle
+    getVehiclesByLead(leadId: ID!): [Vehicle]
+    getVehicles(
+        filter: VehicleFilterInput
+        sortBy: VehicleSortField = CREATED_AT
+        sortOrder: SortOrder = DESC
+    ): [Vehicle]!
+}
+
+type Mutation {
+    # Lead mutations
+    createLead(input: LeadInput!): Lead
+    updateLead(id: ID!, input: LeadInput!): Lead
+    deleteLead(id: ID!): Boolean
+
+    # Task mutations
+    createTask(input: TaskInput!): Task
+    updateTask(id: ID!, input: TaskInput!): Task
+    deleteTask(id: ID!): Boolean
+
+    # Note mutations
+    createNote(input: NoteInput!): Note
+    updateNote(id: ID!, input: NoteInput!): Note
+    deleteNote(id: ID!): Boolean
+
+    # Appointment mutations
+    createAppointment(input: AppointmentInput!): Appointment
+    updateAppointment(id: ID!, input: AppointmentInput!): Appointment
+    deleteAppointment(id: ID!): Boolean
+
+    # Vehicle mutations
+    createVehicle(input: VehicleInput!): Vehicle
+    updateVehicle(id: ID!, input: VehicleInput!): Vehicle
+    deleteVehicle(id: ID!): Boolean
+}
+
+type Lead {
+    id: ID!
+    name: String!
+    email: String
+    phone: String
+    address: String
+    city: String
+    state: String
+    zip: String
+    leadSource: String
+    leadStatus: String!
+    leadOwner: String
+    leadStage: String
+    leadScore: Int
+    leadDescription: String
+    leadNotes: String
+    leadType: String
+    tasks: [Task]
+    vehicles(filter: VehicleFilterInput): [Vehicle]
+    notes: [Note]
+    appointments: [Appointment]
+    createdAt: String!
+    updatedAt: String!
+}
+
+type Vehicle {
+    id: ID!
+    make: String!
+    model: String
+    year: String!
+    color: String
+    vin: String
+    licensePlate: String
+    mileage: Int
+    condition: String
+    notes: String
+    lead: Lead!
+    leadId: ID!
+    createdAt: String!
+    updatedAt: String!
+}
+
+enum SortOrder {
+    ASC
+    DESC
+}
+
+enum VehicleSortField {
+    MAKE
+    MODEL
+    YEAR
+    MILEAGE
+    CREATED_AT
+    UPDATED_AT
+}
+
+enum AppointmentSortField {
+    TITLE
+    START_TIME
+    END_TIME
+    STATUS
+    CREATED_AT
+}
+
+input VehicleFilterInput {
+    make: StringFilterInput
+    model: StringFilterInput
+    year: StringFilterInput
+    condition: StringFilterInput
+}
+
+input AppointmentFilterInput {
+    title: String
+    status: String
+    leadId: ID
+    startTime: TimeRangeInput
+}
+
+input StringFilterInput {
+    eq: String
+    ne: String
+    contains: String
+    notContains: String
+    in: [String!]
+    notIn: [String!]
+    startsWith: String
+    endsWith: String
+}
+
+input IntFilterInput {
+    eq: Int
+    ne: Int
+    gt: Int
+    lt: Int
+    gte: Int
+    lte: Int
+    in: [Int!]
+    notIn: [Int!]
+}
+
+input TimeRangeInput {
+    eq: String
+    ne: String
+    gt: String
+    lt: String
+    gte: String
+    lte: String
+    between: [String!] # [from, to]
+}
+
+type Task {
+    id: ID!
+    title: String!
+    description: String
+    dueDate: String!
+    status: String!
+    priority: String!
+    assignee: String!
+    leadId: ID!
+    notes: [Note]
+    createdAt: String!
+    updatedAt: String!
+}
+
+type Note {
+    id: ID!
+    title: String!
+    content: String
+    author: String
+    leadId: ID
+    taskId: ID
+    createdAt: String!
+    updatedAt: String!
+}
+
+type Appointment {
+    id: ID!
+    title: String!
+    description: String
+    location: String
+    startTime: String!
+    endTime: String!
+    status: String!
+    organizer: String!
+    attendees: [String!]
+    leadId: ID!
+    notes: [Note]
+    createdAt: String!
+    updatedAt: String!
+}
+
+input VehicleInput {
+    make: String!
+    model: String!
+    year: String!
+    color: String
+    vin: String
+    licensePlate: String
+    mileage: Int
+    condition: String
+    notes: String
+    leadId: ID!
+}
+
+input TaskInput {
+    title: String!
+    description: String
+    dueDate: String!
+    status: String!
+    priority: String!
+    assignee: String!
+    leadId: ID!
+}
+
+input NoteInput {
+    title: String!
+    content: String
+    author: String
+    leadId: ID
+    taskId: ID
+}
+
+input AppointmentInput {
+    title: String!
+    description: String
+    location: String
+    startTime: String!
+    endTime: String!
+    status: String
+    organizer: String!
+    attendees: [String!]
+    leadId: ID!
+}
+
+input LeadInput {
+    name: String!
+    email: String
+    phone: String
+    address: String
+    city: String
+    state: String
+    zip: String
+    leadSource: String
+    leadStatus: String!
+    leadOwner: String
+    leadStage: String
+    leadScore: Int
+    leadDescription: String
+    leadNotes: String
+    leadType: String
+    vehicles: [VehicleInput!]
+    tasks: [TaskInput!]
+    notes: [NoteInput!]
+    appointments: [AppointmentInput!]
+}
+
+# Pagination result type
+type LeadPaginationResult {
+    content: [Lead!]!
+    totalElements: Int!
+    totalPages: Int!
+    page: Int!
+    size: Int!
+}
+
+# Pagination result type for Appointments
+type AppointmentPaginationResult {
+    content: [Appointment!]!
+    totalElements: Int!
+    totalPages: Int!
+    page: Int!
+    size: Int!
+}
