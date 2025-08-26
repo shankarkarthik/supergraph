@@ -1,10 +1,14 @@
 import strawberry
 from typing import List, Optional
+
+from app.models.vehicle import Vehicle
+
 from .types import (
     LeadType, TaskType, NoteType, AppointmentType, VehicleType,
     LeadInput, TaskInput, NoteInput, AppointmentInput, VehicleInput,
     LeadPaginationResult, TaskPaginationResult, AppointmentPaginationResult, PageInfo,
-    VehicleFilterInput, AppointmentFilterInput, SortOrder, AppointmentSortField, VehicleSortField
+    VehicleFilterInput, AppointmentFilterInput, LeadFilterInput, SortOrder, AppointmentSortField, VehicleSortField,
+    LeadStatusCount
 )
 from .resolvers import (
     # Query resolvers
@@ -13,6 +17,7 @@ from .resolvers import (
     resolve_get_note, resolve_get_notes_by_lead, resolve_get_notes_by_task,
     resolve_get_appointment, resolve_get_all_appointments,
     resolve_get_vehicle, resolve_get_vehicles_by_lead, resolve_get_vehicles,
+    apply_vehicle_filters,
 
     # Mutation resolvers
     resolve_create_lead, resolve_update_lead, resolve_delete_lead,
@@ -26,8 +31,10 @@ from .resolvers import (
     resolve_task_lead, resolve_task_notes,
     resolve_note_lead, resolve_note_task,
     resolve_appointment_lead, resolve_appointment_notes,
-    resolve_vehicle_lead
+    resolve_vehicle_lead, resolve_get_lead_status_counts
 )
+
+from app.db import db
 
 @strawberry.type
 class Query:
@@ -36,8 +43,8 @@ class Query:
         return resolve_get_lead(id)
 
     @strawberry.field
-    def getAllLeads(self, page: int = 0, size: int = 10) -> LeadPaginationResult:
-        return resolve_get_all_leads(page, size)
+    def getAllLeads(self, page: int = 0, size: int = 10, filter: Optional[LeadFilterInput] = None) -> LeadPaginationResult:
+        return resolve_get_all_leads(page, size, filter)
 
     @strawberry.field
     def getLeadsByStatus(self, status: str) -> LeadPaginationResult:
@@ -96,12 +103,31 @@ class Query:
 
     @strawberry.field
     def getVehicles(
-        self, 
-        filter: Optional[VehicleFilterInput] = None,
-        sort_by: str = "CREATED_AT",
-        sort_order: str = "DESC"
+            self,
+            filter: Optional[VehicleFilterInput] = None,
+            sort_by: str = "CREATED_AT",
+            sort_order: str = "DESC"
     ) -> List[VehicleType]:
-        return resolve_get_vehicles(filter, sort_by, sort_order)
+        vehicles = db.get_all(Vehicle)
+        vehicle_data = [VehicleType(**v.to_dict()) for v in vehicles]
+
+        if filter:
+            vehicle_data = apply_vehicle_filters(vehicle_data, filter)
+
+        # Apply sorting
+        reverse = sort_order.upper() == "DESC"
+        if sort_by.upper() == "MAKE":
+            vehicle_data.sort(key=lambda x: x.make or "", reverse=reverse)
+        elif sort_by.upper() == "MODEL":
+            vehicle_data.sort(key=lambda x: x.model or "", reverse=reverse)
+        elif sort_by.upper() == "YEAR":
+            vehicle_data.sort(key=lambda x: x.year or "", reverse=reverse)
+        # Add more sort options as needed
+
+        return vehicle_data
+    @strawberry.field
+    def get_lead_status_counts(self) -> List[LeadStatusCount]:
+        return resolve_get_lead_status_counts()
 
 @strawberry.type
 class Mutation:
@@ -164,6 +190,7 @@ class Mutation:
     @strawberry.mutation
     def deleteVehicle(self, id: str) -> bool:
         return resolve_delete_vehicle(id)
+
 
 # Create the schema
 schema = strawberry.Schema(query=Query, mutation=Mutation)

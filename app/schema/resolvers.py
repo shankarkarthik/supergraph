@@ -5,7 +5,7 @@ from .types import (
     LeadType, TaskType, NoteType, AppointmentType, VehicleType,
     LeadInput, TaskInput, NoteInput, AppointmentInput, VehicleInput,
     LeadPaginationResult, TaskPaginationResult, AppointmentPaginationResult, PageInfo,
-    VehicleFilterInput, AppointmentFilterInput, SortOrder
+    VehicleFilterInput, AppointmentFilterInput, SortOrder, LeadFilterInput, LeadStatusCount
 )
 from ..models import Lead, Task, Note, Appointment, Vehicle
 
@@ -85,25 +85,79 @@ def resolve_get_lead(id: str) -> Optional[LeadType]:
     return None
 
 
-def resolve_get_all_leads(page: int = 0, size: int = 10) -> LeadPaginationResult:
+def resolve_get_all_leads(
+        page: int = 0,
+        size: int = 10,
+        filter: Optional[LeadFilterInput] = None
+) -> LeadPaginationResult:
     # Get all leads
     all_leads = db.get_all(Lead)
-    leads_data = [LeadType(**lead.to_dict()) for lead in all_leads]
 
-    # Get vehicles for all leads
-    all_vehicles = db.get_all(Vehicle)
-    vehicles_by_lead = {}
-    for vehicle in all_vehicles:
-        if vehicle.lead_id not in vehicles_by_lead:
-            vehicles_by_lead[vehicle.lead_id] = []
-        vehicles_by_lead[vehicle.lead_id].append(VehicleType(**vehicle.to_dict()))
+    # Get current time in ISO format for comparison
+    now = datetime.utcnow().isoformat()
 
-    # Attach vehicles to their respective leads
-    for lead in leads_data:
-        lead.vehicles = vehicles_by_lead.get(lead.id, [])
+    # Get all appointments and group by lead_id
+    all_appointments = db.get_all(Appointment)
+    appointments_by_lead = {}
 
-    # Paginate the results
-    result = paginate(leads_data, page, size)
+    for appt in all_appointments:
+        if appt.lead_id not in appointments_by_lead:
+            appointments_by_lead[appt.lead_id] = []
+        appointments_by_lead[appt.lead_id].append(appt)
+
+    # Process leads with filters
+    filtered_leads = []
+
+    for lead in all_leads:
+        lead_dict = lead.to_dict()
+        lead_appointments = appointments_by_lead.get(lead.id, [])
+
+        # Check upcoming appointments filter if specified
+        if filter and filter.has_upcoming_appointments is not None:
+            has_upcoming = any(
+                appt.start_time > now and appt.status in ["SCHEDULED", "CONFIRMED"]
+                for appt in lead_appointments
+            )
+            if has_upcoming != filter.has_upcoming_appointments:
+                continue
+
+        # Apply vehicle make filter if specified
+        if filter and hasattr(filter, 'vehicle_make') and filter.vehicle_make:
+            lead_vehicles = [v for v in db.get_all(Vehicle) if v.lead_id == lead.id]
+            has_matching_vehicle = any(
+                v.make.lower() == filter.vehicle_make.lower()
+                for v in lead_vehicles
+            )
+            if not has_matching_vehicle:
+                continue
+
+        # Apply other filters
+        if filter:
+            # Name filter
+            if hasattr(filter, 'name') and filter.name and filter.name.eq:
+                if lead_dict.get('name') != filter.name.eq:
+                    continue
+
+            # Email filter
+            if hasattr(filter, 'email') and filter.email and filter.email.eq:
+                if lead_dict.get('email') != filter.email.eq:
+                    continue
+
+            # Add more filters as needed...
+
+        # If we get here, lead passes all filters
+        lead_data = LeadType(**lead_dict)
+
+        # Attach appointments to the lead
+        lead_data.appointments = [
+            AppointmentType(**appt.to_dict())
+            for appt in lead_appointments
+        ]
+
+        filtered_leads.append(lead_data)
+
+    # Apply pagination
+    result = paginate(filtered_leads, page, size)
     return LeadPaginationResult(
         items=result['items'],
         page_info=PageInfo(**result['page_info'])
@@ -256,12 +310,23 @@ def resolve_lead_vehicles(lead: LeadType, filter: Optional[VehicleFilterInput] =
 def resolve_lead_notes(lead: LeadType) -> List[NoteType]:
     return [n for n in resolve_get_notes_by_lead(lead.id)]
 
-def resolve_lead_appointments(lead: LeadType) -> List[AppointmentType]:
-    return [
-        AppointmentType(**a.to_dict())
-        for a in db.get_all(Appointment)
-        if a.lead_id == lead.id
-    ]
+
+def resolve_lead_appointments(lead_id: str, filter: Optional[AppointmentFilterInput] = None) -> List[AppointmentType]:
+    from .types import AppointmentType
+    appointments = db.get_all(Appointment)
+    lead_appointments = [a for a in appointments if a.lead_id == lead_id]
+
+    if filter and filter.status:
+        if filter.status.eq:
+            lead_appointments = [a for a in lead_appointments if a.status == filter.status.eq]
+        if filter.status.ne:
+            lead_appointments = [a for a in lead_appointments if a.status != filter.status.neq]
+        if filter.status.in_list:
+            lead_appointments = [a for a in lead_appointments if a.status in filter.status.in_]
+        if filter.status.not_in:
+            lead_appointments = [a for a in lead_appointments if a.status not in filter.status.nin]
+
+    return [AppointmentType(**appt.to_dict()) for appt in lead_appointments]
 
 def resolve_task_lead(task: TaskType) -> Optional[LeadType]:
     lead = db.get(Lead, task.lead_id)
@@ -303,6 +368,9 @@ def resolve_appointment_notes(appointment: AppointmentType) -> List[NoteType]:
     ]
 
 def resolve_vehicle_lead(vehicle: VehicleType) -> Optional[LeadType]:
+    if not hasattr(vehicle, 'lead_id') or not vehicle.lead_id:
+        return None
+
     lead = db.get(Lead, vehicle.lead_id)
     if lead:
         return LeadType(**lead.to_dict())
@@ -420,3 +488,28 @@ def resolve_get_all_tasks(page: int = 0, size: int = 10) -> dict:
             'has_previous': result['page_info'].get('has_previous', False)
         }
     }
+
+
+def resolve_get_lead_status_counts() -> List[LeadStatusCount]:
+    from .types import LeadStatus  # Import here to avoid circular imports
+    from collections import defaultdict
+
+    # Get all leads
+    all_leads = db.get_all(Lead)
+
+    # Initialize counts for all statuses
+    status_counts = defaultdict(int)
+    for status in LeadStatus:
+        status_counts[status.value] = 0
+
+    # Count leads per status
+    for lead in all_leads:
+        status = lead.to_dict().get('lead_status')
+        if status in status_counts:
+            status_counts[status] += 1
+
+    # Convert to list of LeadStatusCount objects
+    return [
+        LeadStatusCount(status=status, count=count)
+        for status, count in status_counts.items()
+    ]

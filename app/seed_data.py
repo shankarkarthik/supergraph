@@ -15,6 +15,18 @@ TASK_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"]
 TASK_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"]
 APPOINTMENT_STATUSES = ["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW"]
 VEHICLE_MAKES = ["Toyota", "Honda", "Ford", "Chevrolet", "Nissan", "Hyundai", "Kia", "Subaru", "Jeep", "BMW"]
+VEHICLE_MODELS = {
+    "Toyota": ["Camry", "Corolla", "RAV4", "Highlander", "Tacoma", "4Runner", "Sienna", "Tundra", "Prius", "Avalon"],
+    "Honda": ["Civic", "Accord", "CR-V", "Pilot", "HR-V", "Odyssey", "Ridgeline", "Passport", "Insight", "Fit"],
+    "Ford": ["F-150", "Escape", "Explorer", "Mustang", "Edge", "Expedition", "Ranger", "Bronco", "Maverick", "Transit"],
+    "Chevrolet": ["Silverado", "Equinox", "Tahoe", "Traverse", "Malibu", "Trailblazer", "Blazer", "Suburban", "Camaro", "Colorado"],
+    "Nissan": ["Rogue", "Altima", "Sentra", "Rogue Sport", "Murano", "Pathfinder", "Frontier", "Titan", "Versa", "Kicks"],
+    "Hyundai": ["Tucson", "Santa Fe", "Elantra", "Sonata", "Kona", "Palisade", "Venue", "Ioniq", "Nexo", "Veloster"],
+    "Kia": ["Telluride", "Sorento", "Sportage", "Seltos", "Soul", "Forte", "K5", "Carnival", "Stinger", "Niro"],
+    "Subaru": ["Outback", "Forester", "Crosstrek", "Ascent", "Legacy", "Impreza", "WRX", "BRZ", "Baja", "Tribeca"],
+    "Jeep": ["Grand Cherokee", "Wrangler", "Cherokee", "Compass", "Renegade", "Gladiator", "Wagoneer", "Liberty", "Commander", "Patriot"],
+    "BMW": ["3 Series", "5 Series", "X3", "X5", "X7", "4 Series", "7 Series", "X1", "X6", "2 Series"]
+}
 VEHICLE_CONDITIONS = ["NEW", "USED", "CERTIFIED_PREOWNED"]
 VEHICLE_COLORS = ["Black", "White", "Silver", "Gray", "Red", "Blue", "Green", "Yellow", "Orange", "Purple"]
 
@@ -82,15 +94,19 @@ def seed_database():
     # Create sample vehicles
     vehicles = []
     for lead in leads:
+        make = random.choice(VEHICLE_MAKES)
+        model = random.choice(VEHICLE_MODELS[make])  # Select a model based on the make
+        
         vehicle = db.create(Vehicle,
-                            make=random.choice(VEHICLE_MAKES),
-                            model=fake.bs(),
-                            year=str(random.randint(2010, 2023)),
-                            color=random.choice(VEHICLE_COLORS),
-                            vin=fake.license_plate(),
-                            mileage=random.randint(0, 100000),
-                            condition=random.choice(VEHICLE_CONDITIONS),
-                            lead_id=lead.id)
+                         make=make,
+                         model=model,
+                         year=str(random.randint(2010, 2023)),
+                         color=random.choice(VEHICLE_COLORS),
+                         vin=fake.vin(),
+                         mileage=random.randint(1000, 150000),
+                         condition=random.choice(VEHICLE_CONDITIONS),
+                         notes=fake.sentence(),
+                         lead_id=lead.id)
         vehicles.append(vehicle)
     
     # Set up relationships

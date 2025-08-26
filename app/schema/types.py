@@ -126,9 +126,21 @@ class VehicleFilterInput:
 @strawberry.input
 class AppointmentFilterInput:
     title: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[StringFilterInput] = None
     lead_id: Optional[str] = None
     start_time: Optional[TimeRangeInput] = None
+
+@strawberry.input
+class LeadFilterInput:
+    name: Optional[StringFilterInput] = None
+    email: Optional[StringFilterInput] = None
+    phone: Optional[StringFilterInput] = None
+    lead_status: Optional[StringFilterInput] = None
+    lead_source: Optional[StringFilterInput] = None
+    has_upcoming_appointments: Optional[bool] = None
+    vehicle_make: Optional[str] = None
+    lead_category: Optional[StringFilterInput] = None
+    vehicle_type: Optional[StringFilterInput] = None
 
 # Input Types for Mutations
 @strawberry.input
@@ -148,6 +160,7 @@ class LeadInput:
     lead_description: Optional[str] = None
     lead_notes: Optional[str] = None
     lead_type: Optional[str] = None
+    lead_category: Optional[str] = None
 
 @strawberry.input
 class TaskInput:
@@ -229,8 +242,8 @@ class VehicleType:
 
     @strawberry.field
     def lead(self) -> Optional["LeadType"]:
-        # This will be resolved by the resolver
-        pass
+        from .resolvers import resolve_vehicle_lead
+        return resolve_vehicle_lead(self)
 
 @strawberry.type
 class TaskType:
@@ -337,11 +350,16 @@ class LeadType:
         return resolve_lead_notes(self)
 
     @strawberry.field
-    def appointments(self) -> "List[AppointmentType]":
+    def appointments(self, filter: Optional[AppointmentFilterInput] = None) -> "List[AppointmentType]":
         from .resolvers import resolve_lead_appointments
-        return resolve_lead_appointments(self)
+        return resolve_lead_appointments(self.id, filter)
 
 @strawberry.type
 class TaskPaginationResult:
     items: List["TaskType"]
     page_info: "PageInfo"
+
+@strawberry.type
+class LeadStatusCount:
+    status: str
+    count: int
