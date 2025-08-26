@@ -3,7 +3,25 @@ from enum import Enum
 from typing import List, Optional
 import strawberry
 from strawberry.scalars import JSON
+# Add these imports at the top of types.py
+from typing import TYPE_CHECKING, List, Optional
+import strawberry
+from strawberry.scalars import JSON
 
+if TYPE_CHECKING:
+    from .resolvers import (
+        resolve_lead_tasks,
+        resolve_lead_vehicles,
+        resolve_lead_notes,
+        resolve_lead_appointments,
+        resolve_task_lead,
+        resolve_task_notes,
+        resolve_note_lead,
+        resolve_note_task,
+        resolve_appointment_lead,
+        resolve_appointment_notes,
+        resolve_vehicle_lead
+    )
 # Enums
 @strawberry.enum
 class SortOrder(Enum):
@@ -180,7 +198,7 @@ class PageInfo:
     page: int
     size: int
     has_next: bool
-    has_previous: bool
+    has_previous: bool = False
 
 @strawberry.type
 class LeadPaginationResult:
@@ -304,21 +322,26 @@ class LeadType:
     updated_at: str
 
     @strawberry.field
-    def tasks(self) -> List[TaskType]:
-        # This will be resolved by the resolver
-        return []
+    def tasks(self) -> "List[TaskType]":
+        from .resolvers import resolve_lead_tasks
+        return resolve_lead_tasks(self)
 
     @strawberry.field
-    def vehicles(self, filter: Optional[VehicleFilterInput] = None) -> List[VehicleType]:
-        # This will be resolved by the resolver
-        return []
+    def vehicles(self, filter: Optional[VehicleFilterInput] = None) -> "List[VehicleType]":
+        from .resolvers import resolve_lead_vehicles
+        return resolve_lead_vehicles(self, filter)
 
     @strawberry.field
-    def notes(self) -> List[NoteType]:
-        # This will be resolved by the resolver
-        return []
+    def notes(self) -> "List[NoteType]":
+        from .resolvers import resolve_lead_notes
+        return resolve_lead_notes(self)
 
     @strawberry.field
-    def appointments(self) -> List[AppointmentType]:
-        # This will be resolved by the resolver
-        return []
+    def appointments(self) -> "List[AppointmentType]":
+        from .resolvers import resolve_lead_appointments
+        return resolve_lead_appointments(self)
+
+@strawberry.type
+class TaskPaginationResult:
+    items: List["TaskType"]
+    page_info: "PageInfo"

@@ -3,13 +3,13 @@ from typing import List, Optional
 from .types import (
     LeadType, TaskType, NoteType, AppointmentType, VehicleType,
     LeadInput, TaskInput, NoteInput, AppointmentInput, VehicleInput,
-    LeadPaginationResult, AppointmentPaginationResult,
+    LeadPaginationResult, TaskPaginationResult, AppointmentPaginationResult, PageInfo,
     VehicleFilterInput, AppointmentFilterInput, SortOrder, AppointmentSortField, VehicleSortField
 )
 from .resolvers import (
     # Query resolvers
     resolve_get_lead, resolve_get_all_leads, resolve_get_leads_by_status,
-    resolve_get_task, resolve_get_tasks_by_lead,
+    resolve_get_task, resolve_get_all_tasks, resolve_get_tasks_by_lead,
     resolve_get_note, resolve_get_notes_by_lead, resolve_get_notes_by_task,
     resolve_get_appointment, resolve_get_all_appointments,
     resolve_get_vehicle, resolve_get_vehicles_by_lead, resolve_get_vehicles,
@@ -46,6 +46,14 @@ class Query:
     @strawberry.field
     def getTask(self, id: str) -> Optional[TaskType]:
         return resolve_get_task(id)
+
+    @strawberry.field
+    def getAllTasks(self, page: int = 0, size: int = 10) -> TaskPaginationResult:
+        result = resolve_get_all_tasks(page, size)
+        return TaskPaginationResult(
+            items=result['items'],
+            page_info=PageInfo(**result['page_info'])
+        )
 
     @strawberry.field
     def getTasksByLead(self, lead_id: str) -> List[TaskType]:
@@ -159,3 +167,4 @@ class Mutation:
 
 # Create the schema
 schema = strawberry.Schema(query=Query, mutation=Mutation)
+print(schema)

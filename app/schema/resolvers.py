@@ -4,7 +4,7 @@ from ..db import db
 from .types import (
     LeadType, TaskType, NoteType, AppointmentType, VehicleType,
     LeadInput, TaskInput, NoteInput, AppointmentInput, VehicleInput,
-    LeadPaginationResult, AppointmentPaginationResult, PageInfo,
+    LeadPaginationResult, TaskPaginationResult, AppointmentPaginationResult, PageInfo,
     VehicleFilterInput, AppointmentFilterInput, SortOrder
 )
 from ..models import Lead, Task, Note, Appointment, Vehicle
@@ -84,9 +84,26 @@ def resolve_get_lead(id: str) -> Optional[LeadType]:
         return LeadType(**lead.to_dict())
     return None
 
+
 def resolve_get_all_leads(page: int = 0, size: int = 10) -> LeadPaginationResult:
-    leads = [LeadType(**lead.to_dict()) for lead in db.get_all(Lead)]
-    result = paginate(leads, page, size)
+    # Get all leads
+    all_leads = db.get_all(Lead)
+    leads_data = [LeadType(**lead.to_dict()) for lead in all_leads]
+
+    # Get vehicles for all leads
+    all_vehicles = db.get_all(Vehicle)
+    vehicles_by_lead = {}
+    for vehicle in all_vehicles:
+        if vehicle.lead_id not in vehicles_by_lead:
+            vehicles_by_lead[vehicle.lead_id] = []
+        vehicles_by_lead[vehicle.lead_id].append(VehicleType(**vehicle.to_dict()))
+
+    # Attach vehicles to their respective leads
+    for lead in leads_data:
+        lead.vehicles = vehicles_by_lead.get(lead.id, [])
+
+    # Paginate the results
+    result = paginate(leads_data, page, size)
     return LeadPaginationResult(
         items=result['items'],
         page_info=PageInfo(**result['page_info'])
@@ -227,7 +244,11 @@ def resolve_lead_tasks(lead: LeadType) -> List[TaskType]:
     return [t for t in resolve_get_tasks_by_lead(lead.id)]
 
 def resolve_lead_vehicles(lead: LeadType, filter: Optional[VehicleFilterInput] = None) -> List[VehicleType]:
-    vehicles = [v for v in resolve_get_vehicles_by_lead(lead.id)]
+    vehicles = [
+        VehicleType(**v.to_dict())
+        for v in db.get_all(Vehicle)
+        if v.lead_id == lead.id
+    ]
     if filter:
         vehicles = apply_vehicle_filters(vehicles, filter)
     return vehicles
@@ -236,10 +257,9 @@ def resolve_lead_notes(lead: LeadType) -> List[NoteType]:
     return [n for n in resolve_get_notes_by_lead(lead.id)]
 
 def resolve_lead_appointments(lead: LeadType) -> List[AppointmentType]:
-    appointments = db.get_all(Appointment)
     return [
         AppointmentType(**a.to_dict())
-        for a in appointments
+        for a in db.get_all(Appointment)
         if a.lead_id == lead.id
     ]
 
@@ -276,10 +296,9 @@ def resolve_appointment_lead(appointment: AppointmentType) -> Optional[LeadType]
 
 def resolve_appointment_notes(appointment: AppointmentType) -> List[NoteType]:
     # This is a simplified version - in a real app, you'd have a many-to-many relationship
-    notes = db.get_all(Note)
     return [
         NoteType(**n.to_dict())
-        for n in notes
+        for n in db.get_all(Note)
         if hasattr(n, 'appointment_id') and n.appointment_id == appointment.id
     ]
 
@@ -386,3 +405,18 @@ def resolve_update_vehicle(id: str, input: VehicleInput) -> Optional[VehicleType
 
 def resolve_delete_vehicle(id: str) -> bool:
     return db.delete(Vehicle, id)
+
+def resolve_get_all_tasks(page: int = 0, size: int = 10) -> dict:
+    all_tasks = db.get_all(Task)
+    tasks_data = [TaskType(**task.to_dict()) for task in all_tasks]
+    result = paginate(tasks_data, page, size)
+    return {
+        'items': result['items'],
+        'page_info': {
+            'total': result['page_info']['total'],
+            'page': result['page_info']['page'],
+            'size': result['page_info']['size'],
+            'has_next': result['page_info']['has_next'],
+            'has_previous': result['page_info'].get('has_previous', False)
+        }
+    }
