@@ -1,12 +1,14 @@
 # app/agents/graphql_agent.py
-from typing import TypedDict, Annotated, Sequence
-import operator
+from typing import TypedDict, Annotated, Sequence, Literal
+from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import ToolNode, tools_condition
 import requests
 import json
+from enum import Enum
 
 # Configuration
 GRAPHQL_ENDPOINT = "http://localhost:8000/graphql"
@@ -14,8 +16,13 @@ GRAPHQL_ENDPOINT = "http://localhost:8000/graphql"
 
 # Define the agent state
 class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], operator.add]
+    messages: Annotated[list[BaseMessage], lambda x, y: x + y]
     user_query: str
+
+
+# Define available tools
+class AvailableTools(str, Enum):
+    execute_graphql = "execute_graphql"
 
 
 # Initialize the language model
@@ -38,60 +45,70 @@ def execute_graphql(query: str, variables: dict = None) -> dict:
         return {"error": str(e)}
 
 
-# Define the agent nodes
-def should_continue(state: AgentState) -> str:
-    """Determine if the agent should continue or finish."""
+# Define the tool node
+tools = [execute_graphql]
+tool_node = ToolNode(tools)
+
+
+# Define the agent
+def agent(state: AgentState) -> dict:
+    """Agent node that decides which tool to use or responds to the user."""
     messages = state["messages"]
     last_message = messages[-1]
-
-    # If the last message is from the assistant, we're done
-    if isinstance(last_message, AIMessage):
-        return "end"
-    return "continue"
-
-
-def call_model(state: AgentState) -> dict:
-    """Call the language model to generate a response or GraphQL query."""
-    messages = state["messages"]
 
     # If there are no messages, ask for input
     if not messages:
         return {"messages": [AIMessage(content="How can I help you with the GraphQL API?")]}
 
-    # Check if we need to execute a GraphQL query
-    last_message = messages[-1]
-    if "execute_graphql" in last_message.content:
-        query = last_message.content.replace("execute_graphql", "").strip()
-        result = execute_graphql(query)
-        return {"messages": [AIMessage(content=f"GraphQL result: {json.dumps(result, indent=2)}")]}
+    # If the last message is from the user, process it
+    if isinstance(last_message, HumanMessage):
+        # Here you can add logic to decide whether to use a tool or respond directly
+        # For now, we'll just pass it to the LLM
+        response = llm.invoke(messages)
+        return {"messages": [response]}
 
-    # Otherwise, generate a response
-    response = llm.invoke(messages)
-    return {"messages": [response]}
+    # If the last message is from the assistant, check if it contains a tool call
+    elif isinstance(last_message, AIMessage):
+        # Check if the message contains a tool call
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            # Extract the tool calls
+            tool_calls = last_message.tool_calls
+            # For simplicity, we'll just take the first tool call
+            tool_call = tool_calls[0]
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+
+            # Execute the tool
+            if tool_name == "execute_graphql":
+                result = execute_graphql.invoke(tool_args)
+                return {"messages": [AIMessage(content=f"GraphQL result: {json.dumps(result, indent=2)}")]}
+
+        # If no tool calls, just return the message
+        return {"messages": [last_message]}
+
+    # Default case
+    return {"messages": [AIMessage(content="I'm not sure how to process that request.")]}
 
 
 # Create the workflow
 workflow = StateGraph(AgentState)
 
-# Define the nodes
-workflow.add_node("agent", call_model)
-workflow.add_node("action", execute_graphql)
-
-# Define the edges
-workflow.add_conditional_edges(
-    "agent",
-    should_continue,
-    {
-        "continue": "action",
-        "end": END
-    }
-)
-workflow.add_edge("action", "agent")
+# Add nodes
+workflow.add_node("agent", agent)
+workflow.add_node("tools", tool_node)
 
 # Set the entry point
 workflow.set_entry_point("agent")
 
-# Compile the graph
+# Add edges
+workflow.add_conditional_edges(
+    "agent",
+    tools_condition,
+)
+
+workflow.add_edge("tools", "agent")
+
+# Compile the workflow
 app = workflow.compile()
 
 
