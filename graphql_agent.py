@@ -1,29 +1,22 @@
-# app/agents/graphql_agent.py
-from typing import TypedDict, Annotated, List, Dict, Any
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from langgraph.graph import StateGraph, END
+# app/agents/report_agent.py
+from typing import TypedDict, List
+from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 import requests
 import json
+from datetime import datetime
 
 # Configuration
 GRAPHQL_ENDPOINT = "http://localhost:8000/graphql"
 
-
-# Define the agent state
-class AgentState(TypedDict):
-    messages: Annotated[List[BaseMessage], lambda x, y: x + y]
-
-
-# Initialize the language model with the latest client
+# Initialize the language model
 llm = ChatOpenAI(model="gpt-4-turbo", temperature=0)
 
 
-# Define GraphQL tool
 @tool
 def execute_graphql(query: str) -> str:
-    """Execute a GraphQL query and return the result as a string."""
+    """Execute a GraphQL query and return the results as a string."""
     try:
         response = requests.post(
             GRAPHQL_ENDPOINT,
@@ -36,77 +29,59 @@ def execute_graphql(query: str) -> str:
         return f"Error executing GraphQL query: {str(e)}"
 
 
-# Create the agent function
-def agent_node(state: AgentState) -> dict:
-    """Process messages and generate responses."""
-    messages = state["messages"]
+@tool
+def generate_report(data: str, report_type: str) -> str:
+    """Generate a report based on the provided data and report type."""
+    try:
+        prompt = f"""
+        Generate a {report_type} report based on the following data:
 
-    if not messages:
-        return {"messages": [AIMessage(content="How can I assist you with the GraphQL API?")]}
+        {data}
 
-    # Get the last user message
-    user_message = next((m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
-    if not user_message:
-        return {"messages": [AIMessage(content="Please provide a query or request.")]}
-
-    # Simple router to handle different types of queries
-    user_input = user_message.content.lower()
-
-    if any(keyword in user_input for keyword in ["get", "fetch", "list", "find"]):
-        # Generate a GraphQL query based on the user's request
-        query = f"""
-        query {{
-            leads {{
-                id
-                name
-                email
-                leadStatus
-            }}
-        }}
+        The report should be well-structured and include key insights.
         """
-        result = execute_graphql.invoke(query)
-        return {"messages": [AIMessage(content=f"Here are the leads:\n{result}")]}
 
-    elif any(keyword in user_input for keyword in ["create", "add", "new"]):
-        # This is a simplified example - in a real app, you'd parse the input
-        # and generate the appropriate mutation
-        return {"messages": [AIMessage(content="To create a new record, please use the specific GraphQL mutation.")]}
-
-    else:
-        # For other queries, use the LLM to generate a response
-        response = llm.invoke(messages)
-        return {"messages": [response]}
+        response = llm.invoke(prompt)
+        return response.content
+    except Exception as e:
+        return f"Error generating report: {str(e)}"
 
 
-# Create the workflow
-workflow = StateGraph(AgentState)
-workflow.add_node("agent", agent_node)
-workflow.set_entry_point("agent")
-workflow.set_finish_point("agent")  # Simplified to a single node for now
+# Define the tools
+tools = [execute_graphql, generate_report]
 
-# Compile the workflow
-app = workflow.compile()
+# Create the agent
+agent = create_react_agent(
+    llm=llm,
+    tools=tools,
+    prompt="""You are a helpful assistant that generates reports from GraphQL data.
+    When asked to generate a report, first fetch the necessary data using execute_graphql,
+    then use generate_report to format it into a professional report.
+    Always confirm with the user if the report meets their needs.
+    """
+)
 
 
-def create_react_agent():
-    """Create and return a ReAct agent with GraphQL capabilities."""
-    return app
+def generate_report_agent():
+    """Create and return a report generation agent."""
+    return agent
 
 
 # Example usage
 if __name__ == "__main__":
-    agent = create_react_agent()
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    # Initialize the agent
+    agent = generate_report_agent()
 
     # Example conversation
-    state = {
-        "messages": [HumanMessage(content="Get all leads")],
-    }
+    messages = [
+        SystemMessage(content="You are a helpful assistant that generates reports from GraphQL data."),
+        HumanMessage(content="Generate a monthly sales report for August 2023")
+    ]
 
     # Run the agent
-    for output in agent.stream(state):
-        for key, value in output.items():
-            print(f"Node: {key}")
-            if "messages" in value:
-                for msg in value["messages"]:
-                    print(f"{type(msg).__name__}: {msg.content}")
-            print("---")
+    for chunk in agent.stream({"messages": messages}):
+        if "messages" in chunk:
+            for msg in chunk["messages"]:
+                print(f"{msg.type}: {msg.content}")
