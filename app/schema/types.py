@@ -68,6 +68,15 @@ class LeadStatus(Enum):
     CUSTOMER = "CUSTOMER"
 
 @strawberry.enum
+class LeadSource(Enum):
+    WEBSITE = "Website"
+    REFERRAL = "Referral"
+    WALK_IN = "Walk-in"
+    PHONE_INQUIRY = "Phone Inquiry"
+    EMAIL = "Email"
+    SOCIAL_MEDIA = "Social Media"
+
+@strawberry.enum
 class AppointmentStatus(Enum):
     SCHEDULED = "SCHEDULED"
     CONFIRMED = "CONFIRMED"
@@ -83,6 +92,18 @@ class VehicleCondition(Enum):
     LEMON = "LEMON"
     SALVAGE = "SALVAGE"
 
+@strawberry.enum
+class VehicleMake(Enum):
+    TOYOTA = "Toyota"
+    HONDA = "Honda"
+    FORD = "Ford"
+    CHEVROLET = "Chevrolet"
+    NISSAN = "Nissan"
+    HYUNDAI = "Hyundai"
+    KIA = "Kia"
+    SUBARU = "Subaru"
+    JEEP = "Jeep"
+    BMW = "BMW"
 # Input Types
 @strawberry.input
 class StringFilterInput:
@@ -126,7 +147,7 @@ class VehicleFilterInput:
 @strawberry.input
 class AppointmentFilterInput:
     title: Optional[str] = None
-    status: Optional[StringFilterInput] = None
+    status: Optional[AppointmentStatus] = None
     lead_id: Optional[str] = None
     start_time: Optional[TimeRangeInput] = None
 
@@ -135,12 +156,12 @@ class LeadFilterInput:
     name: Optional[StringFilterInput] = None
     email: Optional[StringFilterInput] = None
     phone: Optional[StringFilterInput] = None
-    lead_status: Optional[StringFilterInput] = None
-    lead_source: Optional[StringFilterInput] = None
+    lead_status: Optional[LeadStatus] = None
+    lead_source: Optional[LeadSource] = None
     has_upcoming_appointments: Optional[bool] = None
     vehicle_make: Optional[str] = None
     lead_category: Optional[StringFilterInput] = None
-    vehicle_type: Optional[StringFilterInput] = None
+    vehicle_type: Optional[VehicleMake] = None
 
 # Input Types for Mutations
 @strawberry.input
@@ -193,7 +214,7 @@ class AppointmentInput:
 
 @strawberry.input
 class VehicleInput:
-    make: str
+    make: VehicleMake
     model: Optional[str] = None
     year: str
     color: Optional[str] = None
@@ -227,14 +248,14 @@ class AppointmentPaginationResult:
 @strawberry.type
 class VehicleType:
     id: str
-    make: str
+    make: VehicleMake
     model: Optional[str]
     year: str
     color: Optional[str]
     vin: Optional[str]
     license_plate: Optional[str]
     mileage: Optional[int]
-    condition: Optional[str]
+    condition: VehicleCondition
     notes: Optional[str]
     lead_id: str
     created_at: str
@@ -251,8 +272,8 @@ class TaskType:
     title: str
     description: Optional[str]
     due_date: str
-    status: str
-    priority: str
+    status: TaskStatus
+    priority: TaskPriority
     assignee: str
     lead_id: str
     created_at: str
@@ -297,7 +318,7 @@ class AppointmentType:
     location: Optional[str]
     start_time: str
     end_time: str
-    status: str
+    status: AppointmentStatus
     reminder_time: Optional[str]
     lead_id: str
     created_at: str
@@ -313,6 +334,7 @@ class AppointmentType:
         # This will be resolved by the resolver
         return []
 
+
 @strawberry.type
 class LeadType:
     id: str
@@ -323,8 +345,8 @@ class LeadType:
     city: Optional[str]
     state: Optional[str]
     zip: Optional[str]
-    lead_source: Optional[str]
-    lead_status: str
+    lead_source: LeadSource
+    lead_status: LeadStatus
     lead_owner: Optional[str]
     lead_stage: Optional[str]
     lead_score: Optional[int]
